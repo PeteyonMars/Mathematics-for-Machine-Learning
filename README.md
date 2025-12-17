@@ -5,3 +5,8 @@ A project for a machine learning course I took in Fall 2025; used Principal Comp
 1. .html with the code chunks, outputs loaded.
 2. .Rmd with the code itself.
 3. Write-up created as a group.
+4. Dataset pulled from UCI Repository
+
+# Note
+If you want to run the codes yourself you need to redefine the directory on .Rmd / line 47.
+Also, the Figures labeled in .Rmd refer to the Figures in the Appendix section of the .Pdf write-up attached.
