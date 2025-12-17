@@ -1,0 +1,221 @@
+---
+title: "Project_Draft"
+output:
+  pdf_document: default
+  html_document: default
+date: "2025-11-27"
+header-includes:
+  - \usepackage{setspace}
+  - \doublespacing
+  - \setlength{\parindent}{2em}
+  - \usepackage{etoolbox}
+  - \AtBeginEnvironment{Shaded}{\singlespacing}
+  - \AtBeginEnvironment{verbatim}{\singlespacing}
+---
+
+# Install packages and run libraries
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(eval = TRUE)
+
+# install.packages("Silhouette")
+
+library(MASS)
+library(tidyverse)
+library(gridExtra)
+library(dplyr)
+library(ISLR)
+library(readr)
+library(boot)
+library(ggplot2)
+library(class)
+library(mclust)
+library(FactoMineR)
+library(factoextra)
+library(broom)
+library(patchwork)
+library(Silhouette)
+library(proxy)
+```
+
+
+# Import data. Please change the directory for your computer otherwise the .Rmd will not run
+
+```{r}
+# Import data
+data <- read_csv("C:/Peter/College/Mathematics for Machine Learning/Project/ObesityDataSet_raw_and_data_sinthetic.csv")
+```
+
+# Figure 1
+
+```{r}
+# Visualization 1
+ggplot(data, aes(x = FCVC, y = FAF, color = NObeyesdad)) +
+  geom_jitter(alpha = 0.7) +
+  labs(
+    title = "Eating and Activity Patterns Colored by Obesity Level",
+    x = "Vegetable Consumption Frequency (FCVC)",
+    y = "Physical Activity Frequency (FAF)",
+    color = "Obesity Level"
+  )
+```
+
+# Figure 2
+
+```{r}
+# Visualization 2 
+ggplot(data, aes(x = CALC, y = SMOKE, color = NObeyesdad)) +
+  geom_jitter(alpha = 0.7) +
+  labs(
+    title = "Alcohol and Smoking Behavior Across Obesity Levels",
+    x = "Alcohol Consumption Frequency (CALC)",
+    y = "Smoking Status (SMOKE)",
+    color = "Obesity Level"
+  )
+```
+
+
+# Figure 3 & Table 1
+
+```{r}
+data1 <- data %>%
+  dplyr::select(FCVC, NCP, CH2O, FAF, TUE) # did not include "Age," "Height," and "Weight" to make PCA more meaningful
+```
+
+```{r}
+# Use prcomp() function; we could have manually followed the five steps in 10.6 but this simplifies so much.
+pca_data <- prcomp(data1, scale. = TRUE)
+pca_data # print
+
+PC_data <- as.data.frame(pca_data$x) # transform PC outputs to a dataframe
+PC_data$NObeyesdad <- data$NObeyesdad # add "NObeyesdad" to same dataframe as above. Very important!
+
+
+# Two-dimensional Representation
+p1 <- ggplot(data = PC_data, mapping = aes(x = PC1, y = PC2, color = NObeyesdad)) + 
+  geom_point(alpha = 0.5, size = 2) +
+  geom_vline(aes(xintercept=0), color="lightblue", linetype="dashed", size=1) +
+  geom_hline(aes(yintercept=0), color="lightblue", linetype="dashed", size=1) +
+  labs(
+    title = "2D PCA Representation with Obesity Level"
+  )
+
+p1 # print  
+```
+
+# Figure 4
+
+```{r}
+just_PCs <- as.data.frame(pca_data$x[, 1:2]) # Define a new dataframe for k calculations including ONLY PC1 and PC2
+
+# Use tot.withinss, repeat for k = 1, 2, 3,..., 10, create elbow dataframe
+cluster_measure <- function(data, k) {
+  k_means <- kmeans(data, k)
+  WSS <- k_means$tot.withinss # Calculate total within-cluster sum of squares (WSS)
+  return(WSS)
+}
+
+total_wss_vals <- c()
+
+for (k in 1:10) {
+  total_wss_vals[k] <- cluster_measure(just_PCs, k)
+}
+
+k_vals <- 1:10
+elbow <- data.frame(
+  k = k_vals,
+  total_wss = total_wss_vals
+)
+
+
+# Visualize elbow plot
+ggplot(data = elbow, aes(x = k, y = total_wss_vals)) + 
+geom_point(alpha = 0.7) +
+geom_vline(aes(xintercept=0), color="lightblue", linetype="dashed", linewidth=1) + 
+geom_hline(aes(yintercept=0), color="lightblue", linetype="dashed", linewidth=1)
+```
+
+# Figure 5 (just the k-means part)
+
+```{r}
+# k-means clustering
+k_means <- kmeans(just_PCs, 6)
+data_km <- augment(k_means, just_PCs) # add cluster assignments to data
+
+p2 <- ggplot(data = data_km, mapping = aes(x = PC1, y = PC2, color = .cluster)) + 
+  geom_point(alpha = 0.7, size = 1) +
+  geom_vline(aes(xintercept=0), color="lightblue", linetype="dashed", size=1) + 
+  geom_hline(aes(yintercept=0), color="lightblue", linetype="dashed", size=1) +
+  labs(
+    title = "2D PCA Representation by k = 6 Clustering"
+  )
+
+# p2 # print
+```
+
+# Prints what you see on Figure 5, with both PCA Representation by Obesity Level and k-means Clustering
+
+```{r}
+p1 / p2
+```
+
+# Figures 6, 7, 8
+
+```{r}
+# Use Mclust() to find optimal number of Gaussians
+set.seed(2021) #this allows for consistency between runs
+best_gmm <- Mclust(just_PCs)
+G <- best_gmm$G # access optimal G value
+G
+
+gmm <- Mclust(just_PCs, G = G)
+
+# Define three GMM plots: density, uncertainty, classification
+plot(gmm, what = "density")
+plot(gmm, what = "uncertainty")
+fviz_mclust(gmm, "classification", geom = "point")
+```
+
+# Figure 9, we forgot to seed so some values will be different, but the change is not very significant
+
+```{r}
+# Compute proximity matrix from the PC matrix for k-means
+prox_km <- proxy::dist(just_PCs, k_means$centers)
+
+# Silhouette from package(Silhouette)
+sil_km <- Silhouette(prox_km)
+
+# Print summary %%%% the results here should also be tabulated
+s_km <- summary(sil_km, print.summary = TRUE)
+
+# print avg. Silhouette score
+km_avg_sil <- s_km$avg.width
+km_avg_sil
+
+# plot
+plot(sil_km, main = "Silhouette Plot for k-means (k = 6)")
+```
+
+# Figure 10, we forgot to seed so some values will be different, but the change is not very significant
+
+```{r}
+# define GMM centers in PC space
+gmm_centers <- t(gmm$parameters$mean) # transpose for formatting consistency across gmm_centers and proximity matrix
+
+# Find proximity matrix for GMM, G = 6
+prox_gmm <- proxy::dist(just_PCs, gmm_centers)
+
+# Silhouette from package(Silhouette)
+sil_gmm <- Silhouette(prox_gmm)
+
+# Print summary %%%% the results here should also be tabulated
+s_gmm <- summary(sil_gmm, print.summary = TRUE)
+
+# print avg. Silhouette score
+gmm_avg_sil <- s_gmm$avg.width
+gmm_avg_sil
+
+# plot
+plot(sil_gmm, main = "Silhouette Plot for GMM (G = 6)")
+```
